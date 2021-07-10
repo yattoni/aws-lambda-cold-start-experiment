@@ -33,6 +33,14 @@
       ],
       "condition": "git diff --exit-code > /dev/null"
     },
+    "build+deploy": {
+      "name": "build+deploy",
+      "steps": [
+        {
+          "exec": "yarn build && yarn deploy"
+        }
+      ]
+    },
     "bump": {
       "name": "bump",
       "category": "20.release",
