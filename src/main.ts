@@ -1,4 +1,5 @@
 import { App, Construct, Duration, Stack, StackProps } from 'monocdk';
+import { Code, Function, Runtime } from 'monocdk/aws-lambda';
 import { SqsEventSource } from 'monocdk/lib/aws-lambda-event-sources';
 import { GoFunction } from 'monocdk/lib/aws-lambda-go';
 import { PythonFunction } from 'monocdk/lib/aws-lambda-python';
@@ -18,6 +19,10 @@ export class AwsLambdaColdStartExperiment extends Stack {
     const pythonQueue = new Queue(this, 'PythonQueue');
     pythonTopic.addSubscription(new SqsSubscription(pythonQueue));
 
+    const javaTopic = new Topic(this, 'JavaTopic');
+    const javaQueue = new Queue(this, 'JavaQueue');
+    javaTopic.addSubscription(new SqsSubscription(javaQueue));
+
     const goFunction = new GoFunction(this, 'GoFunction', {
       entry: 'lambdas/golang',
       environment: {
@@ -29,10 +34,32 @@ export class AwsLambdaColdStartExperiment extends Stack {
     const pythonFunction = new PythonFunction(this, 'PythonFunction', {
       entry: 'lambdas/python',
       environment: {
-        TARGET_TOPIC: goTopic.topicArn,
+        TARGET_TOPIC: javaTopic.topicArn,
       },
     });
-    goTopic.grantPublish(pythonFunction);
+    javaTopic.grantPublish(pythonFunction);
+
+    const javaFunction = new Function(this, 'JavaFunction', {
+      runtime: Runtime.JAVA_11,
+      code: Code.fromAsset('lambdas/java/lib/build/libs/lib-0.1.0-all.jar'),
+      // code: Code.fromAsset("lambdas/java", {
+      //   bundling: {
+      //     command: [
+      //       "/bin/sh",
+      //       "-c",
+      //       "./gradlew clean build shadowJar && cp /asset-input/lib/build/libs/lib-0.1.0-all.jar /asset-output/"
+      //     ],
+      //     image: Runtime.JAVA_11.bundlingImage,
+      //   }
+      // }),
+      handler: 'com.yattoni.awslambdacoldstartexperiment.LambdaHandler',
+      environment: {
+        TARGET_TOPIC: goTopic.topicArn,
+      },
+      timeout: Duration.seconds(10),
+      memorySize: 1024,
+    });
+    goTopic.grantPublish(javaFunction);
 
     goFunction.addEventSource(new SqsEventSource(goQueue, {
       batchSize: 10,
@@ -41,6 +68,10 @@ export class AwsLambdaColdStartExperiment extends Stack {
     pythonFunction.addEventSource(new SqsEventSource(pythonQueue, {
       batchSize: 10,
       // maxBatchingWindow: Duration.seconds(10),
+    }));
+    javaFunction.addEventSource(new SqsEventSource(javaQueue, {
+      batchSize: 10,
+      maxBatchingWindow: Duration.seconds(10),
     }));
   }
 }

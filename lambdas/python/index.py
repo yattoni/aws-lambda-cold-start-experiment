@@ -9,8 +9,10 @@ def handler(event, context):
     
     sns = boto3.client('sns')
 
-    message = "Hello golang lambda!!"
+    message = "Hello from python lambda!!"
     topicArn = os.environ["TARGET_TOPIC"]
+
+    print("Sending message to {0}".format(topicArn))
 
     output = sns.publish(
         TopicArn = topicArn,

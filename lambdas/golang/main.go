@@ -17,8 +17,10 @@ func handle(sqsEvent events.SQSEvent) error {
 	sess := session.Must(session.NewSession())
 	snsClient := sns.New(sess)
 
-	message := "Hello python lambda!"
+	message := "Hello from golang lambda!"
 	topicArn := os.Getenv("TARGET_TOPIC")
+
+	fmt.Printf("Sending message to %s\n", topicArn)
 
 	publishOutput, _ := snsClient.Publish(&sns.PublishInput{
 		Message:  &message,
