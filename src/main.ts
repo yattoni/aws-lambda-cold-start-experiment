@@ -1,3 +1,4 @@
+import { env } from 'process';
 import { App, Construct, Duration, Stack, StackProps } from 'monocdk';
 import { Code, Function, Runtime } from 'monocdk/aws-lambda';
 import { SqsEventSource } from 'monocdk/lib/aws-lambda-event-sources';
@@ -41,17 +42,26 @@ export class AwsLambdaColdStartExperiment extends Stack {
 
     const javaFunction = new Function(this, 'JavaFunction', {
       runtime: Runtime.JAVA_11,
-      code: Code.fromAsset('lambdas/java/lib/build/libs/lib-0.1.0-all.jar'),
-      // code: Code.fromAsset("lambdas/java", {
-      //   bundling: {
-      //     command: [
-      //       "/bin/sh",
-      //       "-c",
-      //       "./gradlew clean build shadowJar && cp /asset-input/lib/build/libs/lib-0.1.0-all.jar /asset-output/"
-      //     ],
-      //     image: Runtime.JAVA_11.bundlingImage,
-      //   }
-      // }),
+      // code: Code.fromAsset('lambdas/java/lib/build/libs/lib-0.1.0-all.jar'),
+      code: Code.fromAsset('lambdas/java', {
+        bundling: {
+          command: [
+            '/bin/sh', '-c', [
+              './gradlew clean shadowJar --no-daemon',
+              'cp /asset-input/lib/build/libs/lib-0.1.0-all.jar /asset-output/',
+              'ls /asset-output/',
+            ].join(' && '),
+          ],
+          image: Runtime.JAVA_11.bundlingImage,
+          volumes: [
+            {
+              hostPath: `/Users/${env.USER}/.gradle/`,
+              containerPath: '/root/.gradle',
+            },
+          ],
+          user: 'root',
+        },
+      }),
       handler: 'com.yattoni.awslambdacoldstartexperiment.LambdaHandler',
       environment: {
         TARGET_TOPIC: goTopic.topicArn,
