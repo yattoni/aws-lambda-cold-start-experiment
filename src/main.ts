@@ -1,12 +1,12 @@
 import { env } from 'process';
-import { App, Construct, Duration, Stack, StackProps } from 'monocdk';
+import { App, Construct, DockerImage, Duration, Stack, StackProps } from 'monocdk';
 import { Code, Function, Runtime } from 'monocdk/aws-lambda';
-import { SqsEventSource } from 'monocdk/lib/aws-lambda-event-sources';
-import { GoFunction } from 'monocdk/lib/aws-lambda-go';
-import { PythonFunction } from 'monocdk/lib/aws-lambda-python';
-import { Topic } from 'monocdk/lib/aws-sns';
-import { SqsSubscription } from 'monocdk/lib/aws-sns-subscriptions';
-import { Queue } from 'monocdk/lib/aws-sqs';
+import { SqsEventSource } from 'monocdk/aws-lambda-event-sources';
+import { GoFunction } from 'monocdk/aws-lambda-go';
+import { PythonFunction } from 'monocdk/aws-lambda-python';
+import { Topic } from 'monocdk/aws-sns';
+import { SqsSubscription } from 'monocdk/aws-sns-subscriptions';
+import { Queue } from 'monocdk/aws-sqs';
 
 export class AwsLambdaColdStartExperiment extends Stack {
   constructor(scope: Construct, id: string, props: StackProps = {}) {
@@ -47,19 +47,21 @@ export class AwsLambdaColdStartExperiment extends Stack {
         bundling: {
           command: [
             '/bin/sh', '-c', [
-              './gradlew clean shadowJar --no-daemon',
+              'gradle clean shadowJar --console verbose',
               'cp /asset-input/lib/build/libs/lib-0.1.0-all.jar /asset-output/',
               'ls /asset-output/',
             ].join(' && '),
           ],
-          image: Runtime.JAVA_11.bundlingImage,
+          // https://github.com/keeganwitt/docker-gradle
+          // https://hub.docker.com/_/gradle/
+          image: DockerImage.fromRegistry('gradle:jdk11'),
           volumes: [
             {
               hostPath: `/Users/${env.USER}/.gradle/`,
-              containerPath: '/root/.gradle',
+              containerPath: '/home/gradle/.gradle.',
             },
           ],
-          user: 'root',
+          user: 'gradle',
         },
       }),
       handler: 'com.yattoni.awslambdacoldstartexperiment.LambdaHandler',
@@ -67,10 +69,13 @@ export class AwsLambdaColdStartExperiment extends Stack {
         TARGET_TOPIC: goTopic.topicArn,
       },
       timeout: Duration.seconds(10),
+      // Note: The other two lambdas default to 128 MB and this one needs 1024 MB
+      // in order to not timeout :/
       memorySize: 1024,
     });
     goTopic.grantPublish(javaFunction);
 
+    // If batch size is 0 and window 0 seconds then this will invoke as fast as it can
     goFunction.addEventSource(new SqsEventSource(goQueue, {
       batchSize: 10,
       maxBatchingWindow: Duration.seconds(10),
@@ -95,6 +100,5 @@ const devEnv = {
 const app = new App();
 
 new AwsLambdaColdStartExperiment(app, 'aws-lambda-cold-start-experiment', { env: devEnv });
-// new MyStack(app, 'my-stack-prod', { env: prodEnv });
 
 app.synth();
